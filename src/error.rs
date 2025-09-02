@@ -178,6 +178,9 @@ pub enum CodeGenErrorKind {
     
     #[error("Target not supported: {target}")]
     UnsupportedTarget { target: String },
+    
+    #[error("Runtime error: {message}")]
+    RuntimeError { message: String },
 }
 
 /// Runtime errors

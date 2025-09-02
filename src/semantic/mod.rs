@@ -607,7 +607,13 @@ pub struct TypedBlock {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TypedStatement {
+pub struct TypedStatement {
+    pub kind: TypedStatementKind,
+    pub span: Option<crate::position::Span>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypedStatementKind {
     Expression(TypedExpression),
     Let(String, Type, Option<TypedExpression>),
     Const(String, Type, TypedExpression),
@@ -633,6 +639,7 @@ pub struct TypedMatchArm {
 pub struct TypedExpression {
     pub kind: TypedExpressionKind,
     pub type_: Type,
+    pub span: Option<crate::position::Span>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

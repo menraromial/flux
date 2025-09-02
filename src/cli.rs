@@ -323,7 +323,17 @@ impl CompilerDriver {
             };
 
             if let Some(target) = target {
-                build_config.target = Some(target.clone());
+                build_config.target = Some(match target {
+                    CompilationTarget::Native => "native".to_string(),
+                    CompilationTarget::Wasm => "wasm32-unknown-unknown".to_string(),
+                    CompilationTarget::WasmJs => "wasm32-unknown-unknown".to_string(),
+                });
+                
+                // Set WebAssembly-specific configuration
+                if matches!(target, CompilationTarget::Wasm | CompilationTarget::WasmJs) {
+                    build_config.wasm_target = true;
+                    build_config.generate_js_bindings = matches!(target, CompilationTarget::WasmJs);
+                }
             }
 
             if let Some(output) = output {

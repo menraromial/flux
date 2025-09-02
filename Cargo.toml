@@ -15,6 +15,7 @@ wasmtime = { version = "15.0", optional = true }
 wasmtime-wasi = { version = "15.0", optional = true }
 wasm-encoder = { version = "0.38", optional = true }
 wat = { version = "1.0", optional = true }
+wasmprinter = { version = "0.2", optional = true }
 
 # Error handling and utilities
 thiserror = "1.0"
@@ -57,7 +58,7 @@ tempfile = "3.0"
 [features]
 default = []
 llvm = ["inkwell"]
-wasm = ["wasmtime", "wasmtime-wasi", "wasm-encoder", "wat"]
+wasm = ["wasmtime", "wasmtime-wasi", "wasm-encoder", "wat", "wasmprinter"]
 
 [[bin]]
 name = "flux"

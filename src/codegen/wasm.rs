@@ -10,8 +10,8 @@ use std::collections::HashMap;
 #[cfg(feature = "wasm")]
 use wasm_encoder::{
     Module, CodeSection, DataSection, ExportSection, FunctionSection, ImportSection,
-    MemorySection, MemoryType, TypeSection, ValType, Instruction, BlockType,
-    FuncType, Export, EntityType, GlobalSection, GlobalType, Mutability,
+    MemorySection, MemoryType, TypeSection, ValType, Instruction,
+    FuncType, EntityType, GlobalSection, GlobalType, ExportKind,
 };
 
 /// WebAssembly code generator for Flux
@@ -207,7 +207,7 @@ impl WasmCodeGenerator {
         
         // Export main function if it exists
         if func.name == "main" {
-            self.exports.export(&func.name, Export::Function(func_index));
+            self.exports.export(&func.name, ExportKind::Func, func_index);
         }
         
         // Generate function body
@@ -243,7 +243,7 @@ impl WasmCodeGenerator {
         // Create a global for the constant
         let global_type = GlobalType {
             val_type: wasm_type,
-            mutable: Mutability::Const,
+            mutable: false,
         };
         
         // Generate initialization expression
@@ -294,7 +294,7 @@ impl WasmCodeGenerator {
             }
             _ => {
                 return Err(CodeGenError {
-                    span: None,
+                    span: stmt.span.clone(),
                     kind: CodeGenErrorKind::UnsupportedFeature {
                         feature: format!("Statement: {:?}", stmt.kind),
                     },
@@ -483,13 +483,151 @@ impl WasmCodeGenerator {
                     });
                 }
             }
-            _ => {
-                return Err(CodeGenError {
-                    span: None,
-                    kind: CodeGenErrorKind::UnsupportedFeature {
-                        feature: format!("Binary operation: {:?}", op),
-                    },
-                });
+            BinaryOp::LessEqual => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64LeS);
+                } else if matches!(left.type_, Type::Float) {
+                    function.instruction(&Instruction::F64Le);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Comparison for non-comparable types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::GreaterEqual => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64GeS);
+                } else if matches!(left.type_, Type::Float) {
+                    function.instruction(&Instruction::F64Ge);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Comparison for non-comparable types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::NotEqual => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64Ne);
+                } else if matches!(left.type_, Type::Float) {
+                    function.instruction(&Instruction::F64Ne);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Comparison for non-comparable types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::Modulo => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64RemS);
+                } else if matches!(left.type_, Type::Float) {
+                    // Float modulo is not directly supported in WASM, would need to implement
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Float modulo operation".to_string(),
+                        },
+                    });
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Modulo for non-numeric types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::And => {
+                if matches!(left.type_, Type::Bool) {
+                    function.instruction(&Instruction::I32And);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Logical AND for non-boolean types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::Or => {
+                if matches!(left.type_, Type::Bool) {
+                    function.instruction(&Instruction::I32Or);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Logical OR for non-boolean types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::BitwiseAnd => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64And);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Bitwise AND for non-integer types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::BitwiseOr => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64Or);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Bitwise OR for non-integer types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::BitwiseXor => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64Xor);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Bitwise XOR for non-integer types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::LeftShift => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64Shl);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Left shift for non-integer types".to_string(),
+                        },
+                    });
+                }
+            }
+            BinaryOp::RightShift => {
+                if matches!(left.type_, Type::Int) {
+                    function.instruction(&Instruction::I64ShrS);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Right shift for non-integer types".to_string(),
+                        },
+                    });
+                }
             }
         }
         
@@ -501,6 +639,18 @@ impl WasmCodeGenerator {
         self.generate_expression_instructions(operand, function)?;
         
         match op {
+            UnaryOp::Plus => {
+                // Unary plus is a no-op for numeric types
+                if !matches!(operand.type_, Type::Int | Type::Float) {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Unary plus for non-numeric types".to_string(),
+                        },
+                    });
+                }
+                // Value is already on stack, no additional instruction needed
+            }
             UnaryOp::Minus => {
                 if matches!(operand.type_, Type::Int) {
                     // Negate by subtracting from 0
@@ -530,6 +680,28 @@ impl WasmCodeGenerator {
                         },
                     });
                 }
+            }
+            UnaryOp::BitwiseNot => {
+                if matches!(operand.type_, Type::Int) {
+                    // Bitwise not: XOR with all 1s
+                    function.instruction(&Instruction::I64Const(-1));
+                    function.instruction(&Instruction::I64Xor);
+                } else {
+                    return Err(CodeGenError {
+                        span: None,
+                        kind: CodeGenErrorKind::UnsupportedFeature {
+                            feature: "Bitwise not for non-integer types".to_string(),
+                        },
+                    });
+                }
+            }
+            UnaryOp::Try => {
+                return Err(CodeGenError {
+                    span: None,
+                    kind: CodeGenErrorKind::UnsupportedFeature {
+                        feature: "Try operator (?) not yet implemented for WebAssembly".to_string(),
+                    },
+                });
             }
         }
         
@@ -614,17 +786,20 @@ impl WasmCodeGenerator {
     
     /// Build the final WebAssembly module
     fn build_module(&mut self) -> Result<Vec<u8>, CodeGenError> {
-        // Add all sections to the module
-        self.module.section(&self.types);
-        self.module.section(&self.imports);
-        self.module.section(&self.functions);
-        self.module.section(&self.memory);
-        self.module.section(&self.globals);
-        self.module.section(&self.exports);
-        self.module.section(&self.code);
-        self.module.section(&self.data);
+        // Create a new module for building
+        let mut module = Module::new();
         
-        Ok(self.module.finish())
+        // Add all sections to the module
+        module.section(&self.types);
+        module.section(&self.imports);
+        module.section(&self.functions);
+        module.section(&self.memory);
+        module.section(&self.globals);
+        module.section(&self.exports);
+        module.section(&self.code);
+        module.section(&self.data);
+        
+        Ok(module.finish())
     }
 }
 
@@ -787,7 +962,43 @@ impl WasmMemoryManager {
         // Add the block back to free list
         self.free_blocks.push((offset, size));
         
-        // TODO: Coalesce adjacent free blocks
+        // Coalesce adjacent free blocks
+        self.coalesce_free_blocks();
+    }
+    
+    /// Coalesce adjacent free blocks
+    fn coalesce_free_blocks(&mut self) {
+        if self.free_blocks.is_empty() {
+            return;
+        }
+        
+        // Sort by offset
+        self.free_blocks.sort_by_key(|&(offset, _)| offset);
+        
+        let mut i = 0;
+        while i < self.free_blocks.len() - 1 {
+            let (offset1, size1) = self.free_blocks[i];
+            let (offset2, size2) = self.free_blocks[i + 1];
+            
+            if offset1 + size1 == offset2 {
+                // Merge adjacent blocks
+                self.free_blocks[i] = (offset1, size1 + size2);
+                self.free_blocks.remove(i + 1);
+            } else {
+                i += 1;
+            }
+        }
+    }
+    
+    /// Get total allocated memory
+    pub fn allocated_size(&self) -> u32 {
+        let total_free: u32 = self.free_blocks.iter().map(|(_, size)| size).sum();
+        self.heap_size - total_free
+    }
+    
+    /// Get available memory
+    pub fn available_size(&self) -> u32 {
+        self.free_blocks.iter().map(|(_, size)| size).sum()
     }
 }
 
@@ -798,5 +1009,21 @@ pub struct WasmMemoryManager;
 impl WasmMemoryManager {
     pub fn new(_heap_start: u32, _heap_size: u32) -> Self {
         Self
+    }
+    
+    pub fn allocate(&mut self, _size: u32) -> Option<u32> {
+        None
+    }
+    
+    pub fn deallocate(&mut self, _offset: u32, _size: u32) {
+        // No-op
+    }
+    
+    pub fn allocated_size(&self) -> u32 {
+        0
+    }
+    
+    pub fn available_size(&self) -> u32 {
+        0
     }
 }

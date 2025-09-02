@@ -856,6 +856,7 @@ impl TypeChecker {
                 }),
             },
             type_: inferred_type,
+            span: None,
         };
         
         Ok(TypedConst {
@@ -874,6 +875,7 @@ impl TypeChecker {
                 Ok(TypedExpression {
                     kind: TypedExpressionKind::Literal(lit.clone()),
                     type_,
+                    span: None,
                 })
             }
             Expression::Identifier(name) => {
@@ -891,6 +893,7 @@ impl TypeChecker {
                 Ok(TypedExpression {
                     kind: TypedExpressionKind::Identifier(name.clone()),
                     type_,
+                    span: None,
                 })
             }
             Expression::Binary(left, op, right) => {
@@ -905,6 +908,7 @@ impl TypeChecker {
                         Box::new(typed_right)
                     ),
                     type_: result_type,
+                    span: None,
                 })
             }
             _ => Err(SemanticError {
@@ -965,7 +969,7 @@ impl TypeChecker {
             let typed_stmt = self.check_statement(stmt)?;
             
             // If this is an expression statement, it might determine the block type
-            if let TypedStatement::Expression(ref expr) = typed_stmt {
+            if let TypedStatementKind::Expression(ref expr) = typed_stmt.kind {
                 block_type = expr.type_.clone();
             }
             
@@ -983,7 +987,10 @@ impl TypeChecker {
         match stmt {
             Statement::Expression(expr) => {
                 let typed_expr = self.check_expression(expr)?;
-                Ok(TypedStatement::Expression(typed_expr))
+                Ok(TypedStatement {
+                    kind: TypedStatementKind::Expression(typed_expr),
+                    span: None,
+                })
             }
             Statement::Let(name, type_annotation, init) => {
                 let var_type = if let Some(init_expr) = init {
@@ -1020,7 +1027,10 @@ impl TypeChecker {
                     None
                 };
                 
-                Ok(TypedStatement::Let(name.clone(), var_type, typed_init))
+                Ok(TypedStatement {
+                    kind: TypedStatementKind::Let(name.clone(), var_type, typed_init),
+                    span: None,
+                })
             }
             Statement::Return(expr) => {
                 let typed_expr = if let Some(e) = expr {
@@ -1028,7 +1038,10 @@ impl TypeChecker {
                 } else {
                     None
                 };
-                Ok(TypedStatement::Return(typed_expr))
+                Ok(TypedStatement {
+                    kind: TypedStatementKind::Return(typed_expr),
+                    span: None,
+                })
             }
             _ => {
                 // Placeholder for other statement types

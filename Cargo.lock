@@ -705,6 +705,7 @@ dependencies = [
  "thiserror",
  "toml 0.8.23",
  "wasm-encoder 0.38.1",
+ "wasmprinter",
  "wasmtime",
  "wasmtime-wasi",
  "wat",

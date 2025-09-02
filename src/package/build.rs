@@ -31,6 +31,8 @@ pub struct BuildConfig {
     pub parallel: bool,
     pub output_dir: PathBuf,
     pub verbose: bool,
+    pub wasm_target: bool,
+    pub generate_js_bindings: bool,
 }
 
 /// Optimization levels for compilation
@@ -476,6 +478,8 @@ impl BuildConfig {
             parallel: config.build.parallel,
             output_dir: PathBuf::from("target"),
             verbose: false,
+            wasm_target: false,
+            generate_js_bindings: false,
         })
     }
     
@@ -489,6 +493,8 @@ impl BuildConfig {
             parallel: true,
             output_dir: PathBuf::from("target/debug"),
             verbose: false,
+            wasm_target: false,
+            generate_js_bindings: false,
         }
     }
     
@@ -502,6 +508,8 @@ impl BuildConfig {
             parallel: true,
             output_dir: PathBuf::from("target/release"),
             verbose: false,
+            wasm_target: false,
+            generate_js_bindings: false,
         }
     }
 }

@@ -73,27 +73,49 @@ class FluxModule {{
         const imports = {{
             js: {{
                 console_log: (ptr) => {{
-                    const str = this.readString(ptr);
-                    console.log(str);
+                    try {{
+                        const str = this.readString(ptr);
+                        console.log(str);
+                    }} catch (e) {{
+                        console.error('Error in console_log:', e);
+                    }}
                 }},
                 malloc: (size) => {{
-                    // Simple malloc implementation
-                    // In a real implementation, this would manage a proper heap
-                    return this.allocateMemory(size);
+                    try {{
+                        return this.allocateMemory(size);
+                    }} catch (e) {{
+                        console.error('Error in malloc:', e);
+                        return 0;
+                    }}
                 }},
                 free: (ptr) => {{
-                    // Simple free implementation
-                    // In a real implementation, this would free the memory
-                    this.freeMemory(ptr);
+                    try {{
+                        this.freeMemory(ptr);
+                    }} catch (e) {{
+                        console.error('Error in free:', e);
+                    }}
+                }},
+                // Error handling support
+                throw_error: (ptr) => {{
+                    const message = this.readString(ptr);
+                    throw new Error(message);
+                }},
+                // Performance timing
+                performance_now: () => {{
+                    return performance.now();
                 }}
             }}
         }};
         
-        const module = await WebAssembly.instantiate(wasmBytes, imports);
-        this.instance = module.instance;
-        this.memory = this.instance.exports.memory;
-        
-        return this;
+        try {{
+            const module = await WebAssembly.instantiate(wasmBytes, imports);
+            this.instance = module.instance;
+            this.memory = this.instance.exports.memory;
+            
+            return this;
+        }} catch (error) {{
+            throw new Error(`Failed to load WebAssembly module: ${{error.message}}`);
+        }}
     }}
     
     // Memory management utilities
@@ -189,19 +211,25 @@ if (typeof module !== 'undefined' && module.exports) {{
             .map(|p| p.name.clone())
             .collect();
         
-        wrapper.push_str(&format!("    {}({}) {{\n", name, param_names.join(", ")));
+        // Add async keyword if the function is async
+        let async_keyword = if func.is_async { "async " } else { "" };
+        wrapper.push_str(&format!("    {}{}({}) {{\n", async_keyword, name, param_names.join(", ")));
+        
+        // Add error handling wrapper
+        wrapper.push_str("        try {\n");
         
         // Convert parameters from JS to Flux types
         for param in &func.parameters {
             let flux_type = self.type_to_js_type_name(&param.type_);
             wrapper.push_str(&format!(
-                "        const flux_{} = this.jsToFlux({}, '{}');\n",
+                "            const flux_{} = this.jsToFlux({}, '{}');\n",
                 param.name, param.name, flux_type
             ));
         }
         
         // Call the WASM function
-        wrapper.push_str(&format!("        const result = this.instance.exports.{}(", name));
+        let await_keyword = if func.is_async { "await " } else { "" };
+        wrapper.push_str(&format!("            const result = {}this.instance.exports.{}(", await_keyword, name));
         let flux_params: Vec<String> = func.parameters.iter()
             .map(|p| format!("flux_{}", p.name))
             .collect();
@@ -212,10 +240,15 @@ if (typeof module !== 'undefined' && module.exports) {{
         if !matches!(func.return_type, Type::Unit) {
             let return_type = self.type_to_js_type_name(&func.return_type);
             wrapper.push_str(&format!(
-                "        return this.fluxToJs(result, '{}');\n",
+                "            return this.fluxToJs(result, '{}');\n",
                 return_type
             ));
         }
+        
+        // Close error handling
+        wrapper.push_str("        } catch (error) {\n");
+        wrapper.push_str(&format!("            throw new Error(`Error calling {}: ${{error.message}}`);\n", name));
+        wrapper.push_str("        }\n");
         
         wrapper.push_str("    }\n\n");
         

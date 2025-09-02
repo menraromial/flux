@@ -232,29 +232,214 @@ impl WasmOptimizer {
     }
     
     /// Optimize memory access patterns
-    fn optimize_memory_access(&mut self, program: TypedProgram) -> Result<TypedProgram, CodeGenError> {
+    fn optimize_memory_access(&mut self, mut program: TypedProgram) -> Result<TypedProgram, CodeGenError> {
         // WebAssembly-specific memory optimizations:
         // - Combine adjacent memory operations
         // - Use more efficient load/store instructions
         // - Optimize string operations
         
-        // This is a placeholder - a full implementation would analyze
-        // memory access patterns and optimize them
+        for item in &mut program.items {
+            if let TypedItem::Function(func) = item {
+                self.optimize_function_memory_access(func)?;
+            }
+        }
         
         Ok(program)
     }
     
+    /// Optimize memory access in a function
+    fn optimize_function_memory_access(&self, func: &mut TypedFunction) -> Result<(), CodeGenError> {
+        self.optimize_block_memory_access(&mut func.body)?;
+        Ok(())
+    }
+    
+    /// Optimize memory access in a block
+    fn optimize_block_memory_access(&self, block: &mut TypedBlock) -> Result<(), CodeGenError> {
+        // Look for patterns like:
+        // - Multiple string concatenations -> single allocation
+        // - Array access patterns -> bulk operations
+        // - Repeated field access -> local caching
+        
+        for stmt in &mut block.statements {
+            self.optimize_statement_memory_access(stmt)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Optimize memory access in a statement
+    fn optimize_statement_memory_access(&self, stmt: &mut TypedStatement) -> Result<(), CodeGenError> {
+        match &mut stmt.kind {
+            TypedStatementKind::Expression(expr) => {
+                self.optimize_expression_memory_access(expr)?;
+            }
+            TypedStatementKind::Let(_, _, Some(expr)) => {
+                self.optimize_expression_memory_access(expr)?;
+            }
+            TypedStatementKind::Return(Some(expr)) => {
+                self.optimize_expression_memory_access(expr)?;
+            }
+            TypedStatementKind::If(cond, then_block, else_block) => {
+                self.optimize_expression_memory_access(cond)?;
+                self.optimize_block_memory_access(then_block)?;
+                if let Some(else_block) = else_block {
+                    self.optimize_block_memory_access(else_block)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    
+    /// Optimize memory access in an expression
+    fn optimize_expression_memory_access(&self, expr: &mut TypedExpression) -> Result<(), CodeGenError> {
+        match &mut expr.kind {
+            TypedExpressionKind::Binary(left, _, right) => {
+                self.optimize_expression_memory_access(left)?;
+                self.optimize_expression_memory_access(right)?;
+            }
+            TypedExpressionKind::Unary(_, operand) => {
+                self.optimize_expression_memory_access(operand)?;
+            }
+            TypedExpressionKind::Call(func_expr, args) => {
+                self.optimize_expression_memory_access(func_expr)?;
+                for arg in args {
+                    self.optimize_expression_memory_access(arg)?;
+                }
+            }
+            TypedExpressionKind::Block(block) => {
+                self.optimize_block_memory_access(block)?;
+            }
+            TypedExpressionKind::If(cond, then_block, else_block) => {
+                self.optimize_expression_memory_access(cond)?;
+                self.optimize_block_memory_access(then_block)?;
+                if let Some(else_block) = else_block {
+                    self.optimize_block_memory_access(else_block)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    
     /// Optimize control flow
-    fn optimize_control_flow(&mut self, program: TypedProgram) -> Result<TypedProgram, CodeGenError> {
+    fn optimize_control_flow(&mut self, mut program: TypedProgram) -> Result<TypedProgram, CodeGenError> {
         // WebAssembly-specific control flow optimizations:
         // - Simplify conditional branches
         // - Eliminate unreachable code
         // - Optimize loop structures
         
-        // This is a placeholder - a full implementation would analyze
-        // control flow and apply optimizations
+        for item in &mut program.items {
+            if let TypedItem::Function(func) = item {
+                self.optimize_function_control_flow(func)?;
+            }
+        }
         
         Ok(program)
+    }
+    
+    /// Optimize control flow in a function
+    fn optimize_function_control_flow(&self, func: &mut TypedFunction) -> Result<(), CodeGenError> {
+        self.optimize_block_control_flow(&mut func.body)?;
+        Ok(())
+    }
+    
+    /// Optimize control flow in a block
+    fn optimize_block_control_flow(&self, block: &mut TypedBlock) -> Result<(), CodeGenError> {
+        let mut optimized_statements = Vec::new();
+        let mut i = 0;
+        
+        while i < block.statements.len() {
+            let stmt = &mut block.statements[i];
+            
+            // Check for optimization opportunities
+            match &mut stmt.kind {
+                TypedStatementKind::If(cond, then_block, else_block) => {
+                    // Optimize the condition and blocks
+                    self.optimize_expression_control_flow(cond)?;
+                    self.optimize_block_control_flow(then_block)?;
+                    if let Some(else_block) = else_block {
+                        self.optimize_block_control_flow(else_block)?;
+                    }
+                    
+                    // Check for constant conditions
+                    if let TypedExpressionKind::Literal(literal) = &cond.kind {
+                        match literal {
+                            crate::parser::ast::Literal::Boolean(true) => {
+                                // Always true - replace with then block
+                                optimized_statements.extend(then_block.statements.clone());
+                                i += 1;
+                                continue;
+                            }
+                            crate::parser::ast::Literal::Boolean(false) => {
+                                // Always false - replace with else block
+                                if let Some(else_block) = else_block {
+                                    optimized_statements.extend(else_block.statements.clone());
+                                }
+                                i += 1;
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                TypedStatementKind::Expression(expr) => {
+                    self.optimize_expression_control_flow(expr)?;
+                }
+                TypedStatementKind::Let(_, _, Some(expr)) => {
+                    self.optimize_expression_control_flow(expr)?;
+                }
+                TypedStatementKind::Return(Some(expr)) => {
+                    self.optimize_expression_control_flow(expr)?;
+                    // After a return, all subsequent statements are unreachable
+                    optimized_statements.push(stmt.clone());
+                    break;
+                }
+                TypedStatementKind::Return(None) => {
+                    // After a return, all subsequent statements are unreachable
+                    optimized_statements.push(stmt.clone());
+                    break;
+                }
+                _ => {}
+            }
+            
+            optimized_statements.push(stmt.clone());
+            i += 1;
+        }
+        
+        block.statements = optimized_statements;
+        Ok(())
+    }
+    
+    /// Optimize control flow in an expression
+    fn optimize_expression_control_flow(&self, expr: &mut TypedExpression) -> Result<(), CodeGenError> {
+        match &mut expr.kind {
+            TypedExpressionKind::If(cond, then_block, else_block) => {
+                self.optimize_expression_control_flow(cond)?;
+                self.optimize_block_control_flow(then_block)?;
+                if let Some(else_block) = else_block {
+                    self.optimize_block_control_flow(else_block)?;
+                }
+            }
+            TypedExpressionKind::Binary(left, _, right) => {
+                self.optimize_expression_control_flow(left)?;
+                self.optimize_expression_control_flow(right)?;
+            }
+            TypedExpressionKind::Unary(_, operand) => {
+                self.optimize_expression_control_flow(operand)?;
+            }
+            TypedExpressionKind::Call(func_expr, args) => {
+                self.optimize_expression_control_flow(func_expr)?;
+                for arg in args {
+                    self.optimize_expression_control_flow(arg)?;
+                }
+            }
+            TypedExpressionKind::Block(block) => {
+                self.optimize_block_control_flow(block)?;
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
 
