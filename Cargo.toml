@@ -1,0 +1,68 @@
+[package]
+name = "flux"
+version = "0.1.0"
+edition = "2021"
+authors = ["Flux Team"]
+description = "The Flux programming language compiler and runtime"
+license = "MIT"
+
+[dependencies]
+# LLVM bindings for code generation (optional for now)
+inkwell = { version = "0.4", features = ["llvm17-0"], optional = true }
+
+# WebAssembly support
+wasmtime = { version = "15.0", optional = true }
+wasmtime-wasi = { version = "15.0", optional = true }
+wasm-encoder = { version = "0.38", optional = true }
+wat = { version = "1.0", optional = true }
+
+# Error handling and utilities
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Collections and data structures
+indexmap = "2.0"
+
+# System utilities
+num_cpus = "1.0"
+
+# Serialization for configuration files
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+# Regular expressions
+regex = "1.0"
+
+# Command-line argument parsing
+clap = { version = "4.0", features = ["derive"] }
+
+# Progress reporting
+indicatif = "0.17"
+
+# Colored output
+colored = "2.0"
+
+# FFI support
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["libloaderapi", "minwindef"] }
+
+[dev-dependencies]
+# Testing utilities
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+tempfile = "3.0"
+
+[features]
+default = []
+llvm = ["inkwell"]
+wasm = ["wasmtime", "wasmtime-wasi", "wasm-encoder", "wat"]
+
+[[bin]]
+name = "flux"
+path = "src/main.rs"
+
+[lib]
+name = "flux_compiler"
+path = "src/lib.rs"
